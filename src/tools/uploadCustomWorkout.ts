@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { MyWhooshClient } from '../clients/mywhoosh.js';
-import { asMcpError, McpError } from './utils/toolHelpers.js';
+import { asMcpError, CYCLING_SPORT_TYPE, McpError } from './utils/toolHelpers.js';
 
 const workoutStepSchema = z.object({
   Id: z.number().describe('Step ID (sequential number starting from 1)'),
@@ -29,7 +29,6 @@ const workoutSchema = z.object({
   Name: z.string().describe('Workout name'),
   Description: z.string().default('').describe('Workout description'),
   Mode: z.string().default('E_Ride').describe('Workout mode (use E_Ride for cycling)'),
-  SportsModeType: z.number().min(0).max(3).default(0).describe('MyWhoosh sport mode: 0 = cycling, 1-3 = other sports (rowing/running/etc, per account)'),
   ERGMode: z.string().default('E_OFF').describe('E_ON = ERG on (the trainer holds the target watts), E_OFF = ERG off (default)'),
   IsRecovery: z.boolean().default(false).describe('Is this a recovery workout?'),
   IsIntervals: z.boolean().default(false).describe('true when steps share an IntervalId to form repeated blocks'),
@@ -71,11 +70,11 @@ CREATE VS UPDATE
 - New workout: a new unique numeric Id (a millisecond timestamp works).
 - Update: the same Id and the complete workout, changed and unchanged fields.
 - To put it on the calendar afterwards call createTask with taskType E_Simple_Workout and taskTypeId = this Id.
+- To check it landed, or to find an existing Id, use downloadCustomWorkoutsFromS3. Uploads are asynchronous, so a workout sent a moment ago may take a little while to show up there: do not upload it again, you would create a duplicate.
 
-LIMITS AND KNOWN PROBLEMS
-- If MyWhoosh answers "You don't have enough credit!" the workout was NOT uploaded: ask the user to delete workouts manually in the MyWhoosh app, then retry.
-- MyWhoosh stores every workout uploaded this way with an invalid sportsModeType, so downloadCustomWorkoutsFromS3 and deleteCustomWorkout cannot read or delete it afterwards (known MyWhoosh backend bug, GitHub issue #1). The workout still appears and works in the app and can be deleted there. Do not upload it again to "fix" it: you would create a duplicate.
-- SportsModeType is mandatory for MyWhoosh and is sent for you as 0 (cycling).`;
+LIMITS
+- If MyWhoosh answers "You don't have enough credit!" the workout was NOT uploaded: the account needs room first. Ask the user which workouts to remove (deleteCustomWorkout once they confirm, or they can do it in the MyWhoosh app), then retry.
+- Workouts are stored as cycling workouts (MyWhoosh SportsModeType 0, sent for you).`;
 export const parameters = z.object({
   workouts: z.array(workoutSchema).describe('Array of workout definitions to upload'),
 });
@@ -106,7 +105,7 @@ export async function handler(
       baseUrl: 'COACHING',
       body: JSON.stringify({
         UserId: whooshId,
-        SportsModeType: args.workouts[0]?.SportsModeType ?? 0,
+        SportsModeType: CYCLING_SPORT_TYPE,
         WorkoutsData: workoutsData,
       }),
     });
@@ -126,8 +125,7 @@ export async function handler(
 }
 
 // MyWhoosh answers {"message":"You don't have enough credit!","status":false} when the account
-// can't take more custom workouts. We can't free the space ourselves: the API can't delete the
-// workouts it stored with sportsModeType NaN (see issue #1), so the user has to do it in the app.
+// can't take more custom workouts. Deleting is the user's call, so we only tell them.
 const NO_CREDIT_PATTERN = /enough credit/i;
 
 function noCreditResult(): CallToolResult {
@@ -135,7 +133,7 @@ function noCreditResult(): CallToolResult {
     isError: true,
     content: [{
       type: 'text',
-      text: 'The workout was NOT uploaded: MyWhoosh refused it with "You don\'t have enough credit!". Ask the user to delete some custom workouts manually in the MyWhoosh app (the API cannot delete the ones previously uploaded through it, see https://github.com/mywhoosh-community/mywhoosh-mcp-server/issues/1), then retry the upload.',
+      text: 'The workout was NOT uploaded: MyWhoosh refused it with "You don\'t have enough credit!". Ask the user which custom workouts to delete to make room (deleteCustomWorkout can remove them once they confirm, or they can do it in the MyWhoosh app), then retry the upload.',
     }],
   };
 }

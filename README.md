@@ -129,7 +129,7 @@ A custom domain can be attached under the Worker's Settings → Domains & Routes
 |---|---|---|
 | `uploadCustomWorkout` | Upload or update custom cycling workouts. Re-uploading an existing `Id` updates that workout. | `workouts` |
 | `deleteCustomWorkout` | Delete a custom workout. | `workoutId` |
-| `downloadCustomWorkoutsFromS3` | Download and extract all custom workouts from the MyWhoosh S3 bucket as parsed JSON. Currently fails for the whole account because of [#1](https://github.com/isllabres/mywhoosh-mcp-server/issues/1). | none |
+| `downloadCustomWorkoutsFromS3` | Download and extract all custom workouts from the MyWhoosh S3 bucket as parsed JSON. | none |
 | `getCustomWorkoutUpload` | Get the pre-signed S3 URL used to download custom workouts. | none |
 | `downloadFavoriteWorkouts` | Download the player's favorite workouts. | none |
 | `downloadCalendarWorkouts` | Download the player's calendar workouts. | none |
@@ -199,7 +199,7 @@ A custom domain can be attached under the Worker's Settings → Domains & Routes
 - **Intervals**: give the steps of one block the same `IntervalId`; `0` means the step is not part of an interval.
 - **Create vs update**: use a new unique `Id` (a timestamp works) to create, or the existing `Id` to update.
 - **Scheduling**: upload the workout, then call `createTask` with `taskType: "E_Simple_Workout"` and the workout `Id` as `taskTypeId`. Start and end times are Unix timestamps in seconds.
-- **`SportsModeType`** is mandatory for MyWhoosh but handled for you: it is sent as `0` (cycling).
+- **Sport**: MyWhoosh keeps custom workouts per sport. These tools work with the cycling list: uploads send `SportsModeType: 0`, and listing and deleting use `0` as the first path segment.
 
 ## Usage
 
