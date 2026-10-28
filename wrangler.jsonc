@@ -12,6 +12,6 @@
   // MYWHOOSH_USERNAME, MYWHOOSH_PASSWORD) live in the dashboard's encrypted
   // Variables/Secrets UI instead, since this file is committed to the repo.
   "kv_namespaces": [
-    { "binding": "OAUTH_KV", "id": "21575f838adf4a10b893054897c1df28" }
+    { "binding": "OAUTH_KV", "id": "ff55541d16794a56a68579e61a286b74" }
   ]
 }
