@@ -1,13 +1,11 @@
 import { z } from 'zod';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { MyWhooshClient } from '../clients/mywhoosh.js';
-import { asMcpError, McpError } from './utils/toolHelpers.js';
+import { asMcpError, customWorkoutsPath, McpError } from './utils/toolHelpers.js';
 import AdmZip from 'adm-zip';
 
 export const method = 'downloadCustomWorkoutsFromS3';
-export const description = `List the user's custom workouts with their full definition (steps, power targets, intervals): downloads the account's workout ZIP from MyWhoosh storage and returns {workouts: [...parsed JSON...], count, totalCount}. Use it to check which workouts exist before creating a duplicate, or to read one before updating it with uploadCustomWorkout.
-
-Known problem: while the account holds any workout uploaded through the API, MyWhoosh fails this call (sportsModeType NaN, GitHub issue #1). The tool then returns a plain-text explanation instead of the list. Treat that as "cannot verify what exists", NOT as "there are no workouts", and carry on.`;
+export const description = `List the user's custom cycling workouts with their full definition (Id, name, steps, power targets, intervals): downloads the account's workout ZIP from MyWhoosh storage and returns {workouts: [...parsed JSON...], count, totalCount}. Use it to check which workouts exist before creating a duplicate, to find the Id of a workout to update or delete, or to confirm that an upload landed (uploads are asynchronous, so a workout sent a moment ago may not be listed yet).`;
 export const parameters = z.object({});
 
 export async function handler(
@@ -15,32 +13,9 @@ export async function handler(
   extra: { client: MyWhooshClient }
 ): Promise<CallToolResult> {
   try {
-    const whooshId = extra.client.getWhooshId();
-    if (!whooshId) throw new McpError(-32600, 'Not authenticated');
-
-    // Get S3 URL
-    let uploadInfo: { data: { workoutZipUrl: string; workoutCount: number } };
-    try {
-      uploadInfo = (await extra.client.get(`/client/custom-workout-upload/${whooshId}`, {
-        baseUrl: 'COACHING',
-      })) as { data: { workoutZipUrl: string; workoutCount: number } };
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      // Known MyWhoosh backend bug: any workout created via uploadCustomWorkout
-      // is persisted server-side with sportsModeType: NaN regardless of what
-      // the request sends, which breaks every subsequent read of the account's
-      // custom workouts (this endpoint included). Not fixable from this client
-      // — see https://github.com/mywhoosh-community/mywhoosh-mcp-server/issues/1
-      if (message.includes('sportsModeType')) {
-        return {
-          content: [{
-            type: 'text',
-            text: 'MyWhoosh backend error: cannot list custom workouts right now. Any workout created via uploadCustomWorkout is stored server-side with an invalid "sportsModeType: NaN", which breaks this read endpoint for the whole account. This is a known MyWhoosh backend bug, not an issue with this MCP server — see https://github.com/mywhoosh-community/mywhoosh-mcp-server/issues/1. Waiting on MyWhoosh to fix it.',
-          }],
-        };
-      }
-      throw e;
-    }
+    const uploadInfo = (await extra.client.get(customWorkoutsPath(), { baseUrl: 'COACHING' })) as {
+      data: { workoutZipUrl: string; workoutCount: number };
+    };
 
     if (!uploadInfo.data?.workoutZipUrl) {
       return {
